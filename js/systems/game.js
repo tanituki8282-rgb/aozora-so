@@ -50,6 +50,8 @@
       this.lastReport = null;
       /** @type {string|null} */
       this.graduateId = null;
+      /** @type {number} 引き止めた次の週だけ引く点。隣人の癖とは別。 */
+      this.lingeringFee = 0;
       /** @type {object[]} */
       this.shopOffers = [];
       /** @type {object[]} */
@@ -213,6 +215,7 @@
         souvenirs: this.souvenirs,
         rent: this.rent + (request.extraRent || 0),
         moveCost: moveCost,
+        fee: this.lingeringFee,
         quota: Aozora.data.quotaFor(this.week)
       });
     }
@@ -420,6 +423,8 @@
         this.strikes += 1;
       }
       this.lastReport = report;
+      // 引き止めの未練は、決めた次の週に一度だけ引く。
+      this.lingeringFee = 0;
       this.log.push({
         type: 'score',
         week: this.week,
@@ -454,8 +459,8 @@
         return { ok: true };
       }
       if (this.week % 3 === 0) {
-        var sorted = this._sortedResidents();
-        this.graduateId = sorted.length ? sorted[0].id : null;
+        // 誰が旅立つかは、ここでは決めない。画面で損得を見て選ぶ。
+        this.graduateId = null;
         this.phase = 'graduate';
         return { ok: true };
       }
@@ -464,30 +469,155 @@
     }
 
     /**
+     * 誰を送り出すと、置き土産と、残る盤がどうなるか。
+     * 残る点は、その人を外して置き土産を足した今の配置。隣人の式は変えない。
+     * @returns {{id:string,name:string,icon:string,happiness:number,lastPersonal:number,souvenirId:string,souvenirName:string,souvenirDesc:string,remainScore:number,wantsToLeave:boolean}[]}
+     */
+    graduationChoices() {
+      /** @type {{id:string,name:string,icon:string,happiness:number,lastPersonal:number,souvenirId:string,souvenirName:string,souvenirDesc:string,remainScore:number,wantsToLeave:boolean}[]} */
+      var list = [];
+      var top = -Infinity;
+      var i;
+      for (i = 0; i < this.occupants.length; i++) {
+        if (this.occupants[i].seasonHappiness > top) {
+          top = this.occupants[i].seasonHappiness;
+        }
+      }
+      for (i = 0; i < this.occupants.length; i++) {
+        var occ = this.occupants[i];
+        var tenant = Aozora.data.tenantById(occ.id);
+        var souv = Aozora.data.souvenirById(tenant.souvenirId);
+        var lastPersonal = 0;
+        if (this.lastReport) {
+          var t;
+          for (t = 0; t < this.lastReport.tenants.length; t++) {
+            if (this.lastReport.tenants[t].id === occ.id) {
+              lastPersonal = this.lastReport.tenants[t].personal;
+            }
+          }
+        }
+        /** @type {{id:string,x:number,y:number}[]} */
+        var staying = [];
+        var s;
+        for (s = 0; s < this.occupants.length; s++) {
+          if (this.occupants[s].id === occ.id) {
+            continue;
+          }
+          staying.push({ id: this.occupants[s].id, x: this.occupants[s].x, y: this.occupants[s].y });
+        }
+        /** @type {Record<string, number>} */
+        var souvenirs = {};
+        var key;
+        for (key in this.souvenirs) {
+          if (Object.prototype.hasOwnProperty.call(this.souvenirs, key)) {
+            souvenirs[key] = this.souvenirs[key];
+          }
+        }
+        souvenirs[souv.id] = Math.min(3, (souvenirs[souv.id] || 0) + 1);
+        var report = this.evaluator.score(staying, this.rooms, {
+          houseRuleIds: this.houseRuleIds,
+          souvenirs: souvenirs,
+          rent: this.rent,
+          moveCost: 0,
+          fee: 0,
+          quota: 0
+        });
+        list.push({
+          id: occ.id,
+          name: tenant.name,
+          icon: tenant.icon,
+          happiness: occ.seasonHappiness,
+          lastPersonal: lastPersonal,
+          souvenirId: souv.id,
+          souvenirName: souv.name,
+          souvenirDesc: souv.desc,
+          remainScore: report.total,
+          wantsToLeave: occ.seasonHappiness === top
+        });
+      }
+      list.sort(function (a, b) {
+        if (b.happiness !== a.happiness) {
+          return b.happiness - a.happiness;
+        }
+        if (a.id < b.id) {
+          return -1;
+        }
+        if (a.id > b.id) {
+          return 1;
+        }
+        return 0;
+      });
+      return list;
+    }
+
+    /**
+     * 住人がいない季節の終わりだけ、ここを通す。
      * @returns {{ok:boolean, reason?:string}}
      */
     ackGraduate() {
       if (this.phase !== 'graduate') {
         return { ok: false, reason: '今は卒業の場面ではありません' };
       }
-      if (this.graduateId) {
-        var tenant = Aozora.data.tenantById(this.graduateId);
-        var sid = tenant.souvenirId;
-        var nextLevel = Math.min(3, (this.souvenirs[sid] || 0) + 1);
-        this.souvenirs[sid] = nextLevel;
-        this.graduated.push(this.graduateId);
-        this.log.push({
-          type: 'graduate',
-          week: this.week,
-          id: this.graduateId,
-          souvenirId: sid,
-          level: nextLevel
-        });
-        var leaving = this.graduateId;
-        this.occupants = this.occupants.filter(function (o) {
-          return o.id !== leaving;
-        });
+      if (this.occupants.length > 0) {
+        return { ok: false, reason: '送り出す人を選んでください' };
       }
+      return this._finishSeason();
+    }
+
+    /**
+     * この人を送り出す。点は失われ、その人の置き土産が残る。
+     * @param {string} id
+     * @returns {{ok:boolean, reason?:string}}
+     */
+    chooseGraduate(id) {
+      if (this.phase !== 'graduate') {
+        return { ok: false, reason: '今は卒業の場面ではありません' };
+      }
+      var who = this.occupantById(id);
+      if (!who) {
+        return { ok: false, reason: 'その人はもういません' };
+      }
+      var tenant = Aozora.data.tenantById(id);
+      var sid = tenant.souvenirId;
+      var nextLevel = Math.min(3, (this.souvenirs[sid] || 0) + 1);
+      this.souvenirs[sid] = nextLevel;
+      this.graduateId = id;
+      this.graduated.push(id);
+      this.log.push({
+        type: 'graduate',
+        week: this.week,
+        id: id,
+        souvenirId: sid,
+        level: nextLevel
+      });
+      this.occupants = this.occupants.filter(function (o) {
+        return o.id !== id;
+      });
+      return this._finishSeason();
+    }
+
+    /**
+     * ひとりだけのとき、残してもらう。置き土産はなく、次の週だけ未練で -3。
+     * @returns {{ok:boolean, reason?:string}}
+     */
+    holdGraduate() {
+      if (this.phase !== 'graduate') {
+        return { ok: false, reason: '今は卒業の場面ではありません' };
+      }
+      if (this.occupants.length !== 1) {
+        return { ok: false, reason: 'だれかを送り出す季節です' };
+      }
+      this.graduateId = null;
+      this.lingeringFee = 3;
+      this.log.push({ type: 'hold', week: this.week, id: this.occupants[0].id, fee: 3 });
+      return this._finishSeason();
+    }
+
+    /**
+     * 季節の満足をしまい、店か結末へ進む。
+     * @returns {{ok:boolean}}
+     */
+    _finishSeason() {
       var i;
       for (i = 0; i < this.occupants.length; i++) {
         this.occupants[i].seasonHappiness = 0;

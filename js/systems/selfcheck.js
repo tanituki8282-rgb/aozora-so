@@ -267,11 +267,66 @@ var week3 = game.confirmWeek();
 eq(week3.report.total, 14, '週3の見本は14');
 check(week3.report.pass, '週3合格');
 game.ackResolve();
-check(game.phase === 'graduate' && game.graduateId === 'bonsai', 'いちばん満たされた盆栽が卒業');
-game.ackGraduate();
-check(game.souvenirs['corner-gift'] === 1, '角部屋の恵みが残る');
-check(game.phase === 'shop', '季節の店が開く');
-check(game.occupants.every(function (o) { return o.seasonHappiness === 0; }), '新季節の満足はゼロから');
+check(game.phase === 'graduate' && game.graduateId === null, '卒業は自動では決まらない');
+var gradChoices = game.graduationChoices();
+check(gradChoices.length === 3, '春の終わりは三人から選ぶ');
+var choiceById = {};
+var gi;
+for (gi = 0; gi < gradChoices.length; gi++) {
+  choiceById[gradChoices[gi].id] = gradChoices[gi];
+}
+eq(choiceById.bonsai.remainScore, 7, '盆栽を送ると残る盤は7');
+eq(choiceById.herbalist.remainScore, 11, '店主を送ると残る盤は11');
+eq(choiceById.pianist.remainScore, 10, 'ピアニストを送ると残る盤は10');
+check(choiceById.bonsai.wantsToLeave, '満足1位は盆栽');
+check(choiceById.bonsai.remainScore < choiceById.herbalist.remainScore, '満足1位を送るのが残る盤では一番損');
+var kept = game.chooseGraduate('pianist');
+check(kept.ok, 'ピアニストを送り出せる');
+check(game.souvenirs['night-owl'] === 1, 'ピアニストの置き土産は夜更かし公認');
+check(!game.souvenirs['corner-gift'], '送っていない人の置き土産は残らない');
+check(game.occupantById('bonsai') && !game.occupantById('pianist'), '盆栽は残り、ピアニストはいない');
+check(game.phase === 'shop', '選んだあとに店が開く');
+
+// 同じ見本盤で、満足1位を選んだときだけ角部屋の恵みが残る。
+var sendStar = new Aozora.Game(7);
+sendStar.begin();
+sendStar.chooseApplicant('bonsai');
+sendStar.placeNewcomer(0, 0);
+sendStar.confirmWeek();
+sendStar.ackResolve();
+sendStar.chooseApplicant('herbalist');
+sendStar.placeNewcomer(1, 0);
+sendStar.confirmWeek();
+sendStar.ackResolve();
+sendStar.chooseApplicant('pianist');
+sendStar.placeNewcomer(2, 0);
+sendStar.confirmWeek();
+sendStar.ackResolve();
+check(sendStar.chooseGraduate('bonsai').ok, '盆栽を送り出せる');
+check(sendStar.souvenirs['corner-gift'] === 1, '角部屋の恵みが残る');
+check(!sendStar.occupantById('bonsai'), '送った盆栽はいない');
+check(sendStar.occupants.every(function (o) { return o.seasonHappiness === 0; }), '新季節の満足はゼロから');
+
+// ひとりの季節は、送り出すか、未練を払って残すか。
+var solo = new Aozora.Game(7);
+solo.begin();
+solo.chooseApplicant('bonsai');
+solo.placeNewcomer(0, 0);
+solo.confirmWeek();
+solo.ackResolve();
+solo.skipDraft();
+var soloWeek2 = solo.confirmWeek();
+check(soloWeek2.report.pass && solo.strikes === 0, 'ひとりの盆栽を見送っても春2は5で届く');
+solo.ackResolve();
+solo.skipDraft();
+solo.confirmWeek();
+solo.ackResolve();
+check(solo.phase === 'graduate' && solo.occupants.length === 1, 'ひとりなら引き止めも選べる');
+check(solo.graduationChoices().length === 1, '送り出す候補はひとり');
+check(solo.holdGraduate().ok, '引き止める');
+check(!solo.souvenirs['corner-gift'], '引き止めに置き土産はない');
+check(!!solo.occupantById('bonsai'), '盆栽は残る');
+check(solo.lingeringFee === 3, '次の週の未練は3');
 
 // 未達が二度で審査落ち。卒業は見ない。
 var bad = new Aozora.Game(3);
@@ -417,7 +472,7 @@ function simulate(seed, skipShop) {
     } else if (g.phase === 'resolve') {
       g.ackResolve();
     } else if (g.phase === 'graduate') {
-      g.ackGraduate();
+      resolveGraduation(g);
     } else if (g.phase === 'shop') {
       g.chooseShop(skipShop ? -1 : bestShop(g));
     } else {
@@ -429,6 +484,27 @@ function simulate(seed, skipShop) {
     graduated: g.log.some(function (e) { return e.type === 'graduate'; }),
     weeks: weeks
   };
+}
+
+/**
+ * シミュレーションは、残る盤の点がいちばん高い人を送り出す。
+ * @param {Game} g
+ * @returns {void}
+ */
+function resolveGraduation(g) {
+  if (!g.occupants.length) {
+    g.ackGraduate();
+    return;
+  }
+  var choices = g.graduationChoices();
+  var best = choices[0];
+  var i;
+  for (i = 1; i < choices.length; i++) {
+    if (choices[i].remainScore > best.remainScore) {
+      best = choices[i];
+    }
+  }
+  g.chooseGraduate(best.id);
 }
 
 var scripted = simulate(1, false);
@@ -520,7 +596,7 @@ function simulatePolicy(seed, policy, skipShop) {
     } else if (g.phase === 'resolve') {
       g.ackResolve();
     } else if (g.phase === 'graduate') {
-      g.ackGraduate();
+      resolveGraduation(g);
     } else if (g.phase === 'shop') {
       g.chooseShop(skipShop ? -1 : bestShop(g));
     } else {
