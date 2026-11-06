@@ -119,18 +119,28 @@ eq(librarianCenter.total, 4, '図書委員を中に置くと4');
 var catAlone = score([{ id: 'catlady', x: 2, y: 2 }]);
 eq(catAlone.total, 4, '老婦人ひとりは気まま+在室');
 
+check(Aozora.data.quotaFor(2) === 5, '春2ノルマは見本の隣り合わせが届く5');
+
 var far = score([
   { id: 'catlady', x: 0, y: 0 },
   { id: 'guitarist', x: 2, y: 0 }
-], { quota: 7 });
+], { quota: Aozora.data.quotaFor(2) });
 eq(far.total, 7, '老婦人とギタリストを離すと7', far);
-check(far.pass, '離して置くと週2ノルマ');
+check(far.pass, '離して置くと春2ノルマ');
+
+var gentle = score([
+  { id: 'catlady', x: 0, y: 0 },
+  { id: 'herbalist', x: 1, y: 0 }
+], { quota: Aozora.data.quotaFor(2) });
+eq(gentle.total, 5, '老婦人と店主の隣は5', gentle);
+check(gentle.pass, '穏やか同士の隣は春2に届く');
 
 var near = score([
   { id: 'catlady', x: 0, y: 0 },
   { id: 'guitarist', x: 1, y: 0 }
-]);
+], { quota: Aozora.data.quotaFor(2) });
 eq(near.total, 1, '隣り合わせると減点で1', near);
+check(!near.pass, '早寝の隣のギタリストは春2も未達');
 var nearText = JSON.stringify(near.tenants);
 check(nearText.indexOf('早寝') >= 0 && nearText.indexOf('騒音') >= 0, '隣り合わせの内訳に早寝と騒音');
 
@@ -241,8 +251,12 @@ check(game.week === 2 && game.phase === 'draft', '週2のドラフトへ');
 
 game.chooseApplicant('herbalist');
 game.placeNewcomer(1, 0);
+var week2Preview = game.preview();
 var week2 = game.confirmWeek();
+eq(week2.report.total, week2Preview.total, '春2の予測と判定が一致');
 eq(week2.report.total, 10, '週2の見本は10');
+eq(week2.report.quota, 5, '春2ノルマは5');
+check(week2.report.pass && game.strikes === 0, '見本の春2に判子は付かない');
 game.ackResolve();
 
 game.chooseApplicant('pianist');
@@ -273,6 +287,25 @@ check(!miss2.report.pass && bad.strikes === 2, '見送りでも届かず二度�
 bad.ackResolve();
 check(bad.phase === 'ending' && bad.ending === 'fail', '審査落ち');
 check(bad.graduated.length === 0, '落ちたランに卒業はない');
+
+// 種493401は春1の先頭が老婦人。角に置いてから、春2で店主を隣に置いても判子にしない。
+var taught = new Aozora.Game(493401);
+taught.begin();
+check(taught.offers[0] === 'catlady', '種493401の春1先頭は老婦人');
+taught.chooseApplicant('catlady');
+taught.placeNewcomer(0, 0);
+var taughtWeek1 = taught.confirmWeek();
+check(taughtWeek1.report.pass && taught.strikes === 0, '老婦人の角は春1を越える');
+taught.ackResolve();
+check(taught.offers.indexOf('herbalist') >= 0, '春2の見本に店主がいる');
+taught.chooseApplicant('herbalist');
+taught.placeNewcomer(1, 0);
+var taughtPreview = taught.preview();
+var taughtWeek2 = taught.confirmWeek();
+eq(taughtWeek2.report.total, taughtPreview.total, '春2の老婦人経路も予測と判定が一致');
+eq(taughtWeek2.report.total, 5, '種493401の隣り合わせは5');
+eq(taughtWeek2.report.quota, 5, 'その週のノルマも5');
+check(taughtWeek2.report.pass && taught.strikes === 0, '見本の春2で判子は増えない');
 
 // ログに内訳が残る
 check(game.log.some(function (e) { return e.type === 'score' && e.lines && e.lines.length > 0; }), 'ログに内訳');
