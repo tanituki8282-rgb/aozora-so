@@ -180,7 +180,17 @@
       }
       if (action === 'ack-graduate') {
         this._after(this.game.ackGraduate());
+        this.render();
+        return;
+      }
+      if (action === 'choose-graduate') {
+        this._after(this.game.chooseGraduate(node.getAttribute('data-id') || ''));
         this._writeCodex({ souvenirs: this.game.souvenirs });
+        this.render();
+        return;
+      }
+      if (action === 'hold-graduate') {
+        this._after(this.game.holdGraduate());
         this.render();
         return;
       }
@@ -497,15 +507,15 @@
       } else if (g.phase === 'place') {
         text = '部屋を押すと、予測の点と、なぜその点なのかが見えます。納得してから鍵を渡してくださいね。';
         if (g.week % 3 === 0) {
-          text = '今季の最後の週です。満足がいちばん高い人が、このあと旅立ちます。予測の順位を見てから決めてください。';
+          text = '今季の最後の週です。終わったら、誰を送り出すか選びます。満足は、失う大きさの目安です。';
         }
       } else if (g.phase === 'resolve' && g.lastReport) {
         text = g.lastReport.pass
           ? '暮らしは、今週も息をしていました。'
           : 'ノルマには、あと少し届きませんでした。判子は急がず、でも確かに増えます。';
       } else if (g.phase === 'graduate') {
-        text = g.graduateId
-          ? '満たされた人から、空へ出ていきます。残るルールが、置き土産です。'
+        text = g.occupants.length
+          ? '送り出す人を、ひとり決めてください。その人の点は失われ、置き土産が残ります。どちらも、ただの得ではありません。'
           : '誰もいない季節は、風が通っただけでした。';
       } else if (g.phase === 'shop') {
         text = '季節のあいだに、家訓か増築を、ひとつだけ手に入れられます。何もしないのも、選択です。';
@@ -716,7 +726,9 @@
         html += '</ul></article>';
       }
       html += '<p class="formula">(' + fmt(report.subtotal) + ' + ' + fmt(report.houseAdd) + ') × ' + fmt(report.multiplier) +
-        ' + 家賃 ' + fmt(report.rent) + ' − 引越し ' + fmt(report.moveCost) + ' = <b>' + fmt(report.total) + '</b></p>';
+        ' + 家賃 ' + fmt(report.rent) + ' − 引越し ' + fmt(report.moveCost) +
+        (report.fee ? ' − 未練 ' + fmt(report.fee) : '') +
+        ' = <b>' + fmt(report.total) + '</b></p>';
       html += this._rankingHtml(report, hypothetical);
       html += '</section>';
       return html;
@@ -734,9 +746,11 @@
         return '<section class="ranking"><h3>今季の満足</h3><p class="hint">まだ誰もいません。</p></section>';
       }
       var seasonEnd = g.week % 3 === 0 && (g.phase === 'place' || g.phase === 'resolve' || g.phase === 'graduate');
-      var html = '<section class="ranking"><h3>' + (seasonEnd ? '今季の満足（いちばん上が旅立つ）' : '今季の満足') + '</h3>';
+      var html = '<section class="ranking"><h3>' + (seasonEnd ? '今季の満足（送り出すときの参考）' : '今季の満足') + '</h3>';
       if (!seasonEnd) {
-        html += '<p class="hint">旅立ちは、季節の最後の週です。</p>';
+        html += '<p class="hint">送り出す人は、季節の最後に自分で選びます。</p>';
+      } else if (g.phase !== 'graduate') {
+        html += '<p class="hint">満足が高い人を送り出すと、失う点が大きくなります。</p>';
       }
       html += '<ol>';
       var i;
@@ -753,22 +767,32 @@
      */
     _graduateHtml() {
       var g = this.game;
-      var html = '<section class="panel">';
-      if (!g.graduateId) {
-        html += '<h2>静かな季節の終わり</h2><p>住人がいないので、置き土産もありません。</p></section>';
-        return html;
+      if (!g.occupants.length) {
+        return '<section class="panel"><h2>静かな季節の終わり</h2><p>住人がいないので、置き土産もありません。</p></section>';
       }
-      var tenant = Aozora.data.tenantById(g.graduateId);
-      var souv = Aozora.data.souvenirById(tenant.souvenirId);
-      var level = (g.souvenirs[souv.id] || 0) + 1;
-      html += '<p class="eyebrow">卒業</p><h2>' + tenant.icon + ' ' + esc(tenant.name) + '</h2>';
-      html += '<p>' + esc(tenant.souvenirNote) + '</p>';
-      html += '<p><b>置き土産「' + esc(souv.name) + '」</b>';
-      if (level > 1) {
-        html += ' Lv' + String(Math.min(3, level));
+      var choices = g.graduationChoices();
+      var html = '<section class="shop-list">';
+      var i;
+      for (i = 0; i < choices.length; i++) {
+        var choice = choices[i];
+        html += '<button type="button" class="shop-card" data-action="choose-graduate" data-id="' + esc(choice.id) + '">';
+        html += '<span class="icon">' + choice.icon + '</span>';
+        html += '<strong>' + esc(choice.name) + ' を送り出す</strong>';
+        if (choice.wantsToLeave) {
+          html += '<span class="tag">いちばん満たされている</span>';
+        }
+        html += '<span>今季の満足 ' + fmt(choice.happiness) + '。先週の個人点 ' + fmt(choice.lastPersonal) + ' を、来季の盤から失う。</span>';
+        html += '<span>置き土産「' + esc(choice.souvenirName) + '」' + esc(choice.souvenirDesc) + '</span>';
+        html += '<span class="delta">この人を外して置き土産を足すと、今の盤は ' + fmt(choice.remainScore) + ' 点</span>';
+        html += '</button>';
       }
-      html += '<br>' + esc(souv.desc) + '</p>';
-      html += this._rankingHtml(null, false);
+      if (g.occupants.length === 1) {
+        html += '<button type="button" class="shop-card" data-action="hold-graduate">';
+        html += '<strong>' + choices[0].icon + ' ' + esc(choices[0].name) + ' を引き止める</strong>';
+        html += '<span>置き土産はありません。この人は残ります。</span>';
+        html += '<span class="delta">代わりに、次の週だけ引き止めの未練 -3</span>';
+        html += '</button>';
+      }
       html += '</section>';
       return html;
     }
@@ -900,7 +924,11 @@
         }
         buttons += '<button type="button" class="primary" data-action="ack-resolve">' + nextLabel + '</button>';
       } else if (g.phase === 'graduate') {
-        buttons += '<button type="button" class="primary" data-action="ack-graduate">' + (g.week >= 12 ? '結果を見る' : '季節の店へ') + '</button>';
+        if (!g.occupants.length) {
+          buttons += '<button type="button" class="primary" data-action="ack-graduate">' + (g.week >= 12 ? '結果を見る' : '季節の店へ') + '</button>';
+        } else {
+          hint = 'カードが、送り出したあとの損得です。満足がいちばん高い人を送ると、失う点が一番大きいとは限りません。';
+        }
       } else if (g.phase === 'shop') {
         buttons += '<button type="button" data-action="shop-skip">何も買わない</button>';
       }
@@ -939,7 +967,7 @@
         '<li>北が上です。料理の煙は、上の階の人に届きます。</li></ul>' +
         '<h3>暮らし点</h3><p>誰でも、暮らしているだけで +1。癖の加算を足して、個人の倍率をかけます。家訓と置き土産の加算を足したあと家の倍率をかけ、最後に家賃を足し、引越しを引きます。内訳は、点の横に必ず出します。</p>' +
         '<h3>ノルマ</h3><p>週ごとに暮らし点の目標があります。届かないと審査の判子がひとつ。二つ溜まると、そのランは審査落ちです。倒産ではなく、今回は見送り、という終わり方です。</p>' +
-        '<h3>卒業</h3><p>3週ごとに季節が終わり、今季の満足がいちばん高い人が出ていきます。満足は、その週だけの点ではなく、今季に積もった個人点です。出ていった人は置き土産（恒久のルール）を残し、同じランには戻りません。同点なら、先に住みはじめた人が旅立ちます。</p>' +
+        '<h3>卒業</h3><p>3週ごとに、送り出す人をひとり選びます。その人の点は失われ、置き土産が残ります。満足がいちばん高い人を送るのが、残る盤にとって一番よいとは限りません。住人がひとりだけのときは、引き止めることもできます。置き土産はなく、次の週だけ未練で -3 です。</p>' +
         '<h3>店</h3><p>春・夏・秋の終わりに、家訓か増築をひとつ選べます。冬の終わりに店はありません。増築は、人が入るまで点数は増えません。</p>' +
         '<p class="hint">在室の +1 は、住人の癖とは別に、誰にでも付きます。</p>' +
         '</div></div>'

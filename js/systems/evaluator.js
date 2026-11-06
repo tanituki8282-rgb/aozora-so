@@ -12,7 +12,7 @@
     /**
      * @param {{id:string,x:number,y:number}[]} occupants
      * @param {{id:string,x:number,y:number,kind:string,label:string}[]} rooms
-     * @param {{houseRuleIds?:string[], souvenirs?:Record<string, number>, rent?:number, moveCost?:number, quota?:number}} options
+     * @param {{houseRuleIds?:string[], souvenirs?:Record<string, number>, rent?:number, moveCost?:number, fee?:number, quota?:number}} options
      * @returns {object}
      */
     score(occupants, rooms, options) {
@@ -85,16 +85,20 @@
 
       var rent = options.rent || 0;
       var moveCost = options.moveCost || 0;
+      var fee = options.fee || 0;
       if (rent) {
         houseLines.push({ scope: 'house', text: '家賃', amount: rent, kind: 'add', fired: true });
       }
       if (moveCost) {
         houseLines.push({ scope: 'house', text: '引越し費用', amount: -moveCost, kind: 'add', fired: true });
       }
+      if (fee) {
+        houseLines.push({ scope: 'house', text: '引き止めの未練', amount: -fee, kind: 'add', fired: true });
+      }
 
       var beforeMul = Aozora.num.round2(subtotal + houseAdd);
       var afterMul = Aozora.num.round2(beforeMul * product);
-      var total = Aozora.num.round2(afterMul + rent - moveCost);
+      var total = Aozora.num.round2(afterMul + rent - moveCost - fee);
       var quota = options.quota;
 
       return {
@@ -107,6 +111,7 @@
         afterMul: afterMul,
         rent: rent,
         moveCost: moveCost,
+        fee: fee,
         total: total,
         quota: quota,
         pass: total + 1e-9 >= quota
