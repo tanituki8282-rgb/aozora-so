@@ -291,26 +291,24 @@
         if (!this.move.id) {
           if (!occ) {
             this.note = '動かす人を選んでください。';
-          } else if (occ.id === g.newcomerId) {
-            this.note = '今週来た人は、空き部屋を押せば無料で置き直せます。';
           } else {
             this.move.id = occ.id;
             this.move.dest = null;
-            this.note = '';
+            this.note = '空室を一度押すと、そこに引っ越します（-2）。点は、引っ越したあとに出ます。';
           }
           this.render();
           return;
         }
         if (!occ) {
-          this.move.dest = { x: x, y: y };
-          this.note = '';
+          // 行き先は一度だけ。押した部屋が引越しそのもの。
+          var moved = g.moveResident(this.move.id, x, y);
+          this._after(moved);
+          this.move = null;
           this.render();
           return;
         }
-        if (occ.id !== g.newcomerId) {
-          this.move.id = occ.id;
-          this.move.dest = null;
-        }
+        this.move.id = occ.id;
+        this.note = '空室を一度押すと、そこに引っ越します（-2）。';
         this.render();
         return;
       }
@@ -320,9 +318,16 @@
         this.render();
         return;
       }
-      if (g.pendingId || g.newcomerId) {
-        this.ghost = { x: x, y: y };
-        this.note = '';
+      if (g.pendingId) {
+        // 仮置きで全部屋の点を見比べない。押した部屋が、その人の場所。
+        var placed = g.placeNewcomer(x, y);
+        this._after(placed);
+        this.ghost = null;
+        this.render();
+        return;
+      }
+      if (g.newcomerId) {
+        this.note = '置いた部屋が決まりです。動かすなら、引越し（-2）を一度だけ。';
         this.render();
         return;
       }
@@ -366,15 +371,12 @@
       if (g.phase === 'graduate' || g.phase === 'shop' || g.phase === 'ending' || g.phase === 'title') {
         return g.lastReport;
       }
+      // 置く前の全部屋プレビューは出さない。点は、置いたあとの盤だけ。
+      if (g.phase === 'place' && g.pendingId) {
+        return null;
+      }
       /** @type {object} */
       var spec = {};
-      if (this.move && this.move.id && this.move.dest) {
-        spec.ghostMove = { id: this.move.id, x: this.move.dest.x, y: this.move.dest.y };
-      } else if (this.ghost && g.pendingId) {
-        spec.ghostPlace = { x: this.ghost.x, y: this.ghost.y };
-      } else if (this.ghost && g.newcomerId) {
-        spec.ghostMove = { id: g.newcomerId, x: this.ghost.x, y: this.ghost.y };
-      }
       if (g.phase === 'draft' && this.armSkip) {
         spec.extraRent = 1;
       }
@@ -407,7 +409,7 @@
         '<div class="title-screen"><section class="hero">' +
         '<p class="eyebrow">下宿屋の点数パズル</p>' +
         '<h1>あおぞら荘の入居審査</h1>' +
-        '<p class="lead">癖のある人を、うまく隣り合わせる。暮らし点がノルマに届くか、鍵を渡す前に予測できます。</p>' +
+        '<p class="lead">癖のある人を、うまく隣り合わせる。部屋は一度押すと決まり、暮らし点はそのあとに出ます。</p>' +
         '<div class="seed-row"><label>種（同じ数字なら、同じ順番）<input id="seed-input" type="number" min="1" step="1" value="' +
         String(seed) +
         '"></label></div>' +
@@ -505,9 +507,12 @@
           ? '第1季は見本の並びです。三人の癖を読んで、ひとりに鍵を渡すか、今週は家賃だけいただくか。'
           : '今週の玄関に、三人が立っています。ひとりを選ぶか、家賃だけいただくか。';
       } else if (g.phase === 'place') {
-        text = '部屋を押すと、予測の点と、なぜその点なのかが見えます。納得してから鍵を渡してくださいね。';
-        if (g.week % 3 === 0) {
+        if (g.pendingId) {
+          text = 'カードの癖を読んで、部屋を一度押してください。押した場所が決まりです。暮らし点は、置いたあとに出ます。';
+        } else if (g.week % 3 === 0) {
           text = '今季の最後の週です。終わったら、誰を送り出すか選びます。満足は、失う大きさの目安です。';
+        } else {
+          text = '置いたあとの内訳が、ここに出ています。動かすなら引越しは週に一度、点は引っ越したあとにわかります。';
         }
       } else if (g.phase === 'resolve' && g.lastReport) {
         text = g.lastReport.pass
@@ -543,13 +548,13 @@
           banner = '<p class="hint">鍵を渡す人: ' + pending.icon + ' ' + esc(pending.name) + '</p>';
         } else if (g.newcomerId) {
           var arrived = Aozora.data.tenantById(g.newcomerId);
-          banner = '<p class="hint">今週の入居: ' + arrived.icon + ' ' + esc(arrived.name) + '。空き部屋を押すと、無料で置き直せます。</p>';
+          banner = '<p class="hint">今週の入居: ' + arrived.icon + ' ' + esc(arrived.name) + '。この部屋が決まりです。</p>';
         }
         return (
           '<p class="compass">↑ 北が上の階。隣は上下左右だけ。ななめは隣ではありません。角・辺・中は、増築しても変わりません。</p>' +
           banner +
           '<div class="stage-grid"><div class="board-wrap">' + this._boardHtml() + '</div>' +
-          '<div class="report-wrap">' + this._reportHtml(report, true) + '</div></div>'
+          '<div class="report-wrap">' + this._reportHtml(report, false) + '</div></div>'
         );
       }
       if (g.phase === 'resolve') {
@@ -604,6 +609,65 @@
     }
 
     /**
+     * 点数は出さない。カードに書いてある癖が、その部屋に当てはまる印だけ。
+     * @param {object} tenant
+     * @param {{x:number,y:number,kind:string}} room
+     * @returns {string[]}
+     */
+    _roomCues(tenant, room) {
+      /** @type {string[]} */
+      var cues = [];
+      /** @type {Record<string, boolean>} */
+      var seen = {};
+      var rules = tenant.rules || [];
+      var i;
+      for (i = 0; i < rules.length; i++) {
+        var rule = rules[i];
+        if (!rule || !rule.query || rule.value <= 0 || cues.length >= 2) {
+          continue;
+        }
+        var kind = rule.query.kind;
+        /** @type {string} */
+        var text = '';
+        if (kind === 'isCorner' && room.kind === 'corner') {
+          text = '角';
+        } else if (kind === 'isCenter' && room.kind === 'center') {
+          text = '中';
+        } else if (kind === 'isExtra' && room.kind === 'extra') {
+          text = '増築';
+        } else if (kind === 'adjacentTag' && rule.query.tag && this._neighborHasTag(room, rule.query.tag)) {
+          text = '隣が' + rule.query.tag;
+        }
+        if (text && text !== room.label && !seen[text]) {
+          seen[text] = true;
+          cues.push(text);
+        }
+      }
+      return cues;
+    }
+
+    /**
+     * @param {{x:number,y:number}} room
+     * @param {string} tag
+     * @returns {boolean}
+     */
+    _neighborHasTag(room, tag) {
+      var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      var i;
+      for (i = 0; i < dirs.length; i++) {
+        var occ = this.game.occupantAt(room.x + dirs[i][0], room.y + dirs[i][1]);
+        if (!occ) {
+          continue;
+        }
+        var tenant = Aozora.data.tenantById(occ.id);
+        if (tenant && tenant.tags.indexOf(tag) >= 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
      * @returns {string}
      */
     _boardHtml() {
@@ -643,6 +707,19 @@
         }
         html += '<button type="button" class="' + cls + '" data-action="cell" data-x="' + room.x + '" data-y="' + room.y + '" style="grid-column:' + (room.x - minX + 1) + ';grid-row:' + (room.y - minY + 1) + '">';
         html += '<span class="room-label">' + esc(room.label) + '</span>';
+        if (!occ) {
+          var cueFor = null;
+          if (g.pendingId) {
+            cueFor = Aozora.data.tenantById(g.pendingId);
+          } else if (this.move && this.move.id) {
+            cueFor = Aozora.data.tenantById(this.move.id);
+          }
+          var cues = cueFor ? this._roomCues(cueFor, room) : [];
+          var c;
+          for (c = 0; c < cues.length; c++) {
+            html += '<span class="cue">' + esc(cues[c]) + '</span>';
+          }
+        }
         /** @type {object|null} */
         var shown = null;
         if (isGhost && g.pendingId) {
@@ -672,7 +749,7 @@
      */
     _reportHtml(report, hypothetical) {
       if (!report) {
-        return '<section class="report"><p class="hint">部屋を選ぶと、予測がここに出ます。</p></section>';
+        return '<section class="report"><p class="hint">部屋を一度押すと、置いたあとの暮らし点と内訳が出ます。押す前に、全部屋の点は出ません。</p></section>';
       }
       var passClass = report.pass ? 'pass' : 'fail';
       var html = '<section class="report ' + passClass + '">';
@@ -884,37 +961,21 @@
         }
         hint = 'いま住んでいる人だけで週末を迎えた場合の点です。';
       } else if (g.phase === 'place') {
-        if (this.ghost && (g.pendingId || g.newcomerId)) {
-          var label = g.pendingId ? 'この部屋に決める' : 'この部屋へ移す';
-          buttons += '<button type="button" class="primary" data-action="commit-place">' + label + '</button>';
-          buttons += '<button type="button" data-action="cancel-ghost">やめる</button>';
-          hint = '予測は仮置きです。決めると盤に残ります。';
-        }
-        var veterans = false;
-        var i;
-        for (i = 0; i < g.occupants.length; i++) {
-          if (g.occupants[i].id !== g.newcomerId) {
-            veterans = true;
-          }
-        }
-        if (!this.move && veterans && !g.movedThisWeek) {
+        if (!this.move && g.occupants.length && !g.movedThisWeek && !g.pendingId) {
           buttons += '<button type="button" data-action="move-start">引越し（-2）</button>';
         } else if (g.movedThisWeek) {
           buttons += '<button type="button" disabled>今週の引越しは済み</button>';
         }
         if (this.move) {
-          if (this.move.id && this.move.dest) {
-            buttons += '<button type="button" class="primary" data-action="commit-move">引越しを確定</button>';
-          }
           buttons += '<button type="button" data-action="move-cancel">引越しをやめる</button>';
-          if (!this.move.dest) {
-            hint = '空室を押すと、引越し後の予測が出ます。';
-          }
+          hint = this.move.id
+            ? '空室を一度押すと、その部屋へ引っ越します（-2）。'
+            : '動かす人を選んでください。';
         }
-        var canEnd = !g.pendingId && !this.ghost && !this.move;
+        var canEnd = !g.pendingId && !this.move;
         buttons += '<button type="button" class="primary" data-action="confirm-week"' + (canEnd ? '' : ' disabled') + '>この配置で週末へ</button>';
-        if (g.pendingId && !this.ghost) {
-          hint = '空き部屋を押すと、置いたあとの点が見えます。';
+        if (g.pendingId) {
+          hint = '部屋の印は癖の目印です。点は、押したあとに出ます。';
         }
       } else if (g.phase === 'resolve') {
         var nextLabel = '次の週へ';
@@ -933,7 +994,7 @@
       } else if (g.phase === 'shop') {
         buttons += '<button type="button" data-action="shop-skip">何も買わない</button>';
       }
-      var score = '予測はまだありません';
+      var score = '部屋を一度選ぶと、暮らし点が出ます';
       if (g.phase === 'shop' || g.phase === 'graduate') {
         score = '季節の区切り';
       } else if (report) {
@@ -942,7 +1003,7 @@
         if (g.phase === 'resolve') {
           word = report.pass ? '届きました' : '未達';
         }
-        score = (g.phase === 'resolve' ? '暮らし点 ' : '予測 ') + '<b>' + fmt(report.total) + '</b> / ノルマ ' + fmt(report.quota) +
+        score = (g.phase === 'draft' ? '予測 ' : '暮らし点 ') + '<b>' + fmt(report.total) + '</b> / ノルマ ' + fmt(report.quota) +
           ' <span class="pill ' + pill + '">' + word + '</span>';
       }
       return '<footer class="dock"><p class="dock-score" aria-live="polite">' + score + '</p>' +
@@ -958,7 +1019,7 @@
         '<div class="modal" data-action="help-close"><div class="modal-card" data-action="noop">' +
         '<button type="button" data-action="help-close">閉じる</button>' +
         '<h2>遊び方</h2>' +
-        '<h3>一週間</h3><p>三人からひとり選ぶか、見送って家賃を +1 します。空き部屋に置き、予測を見てから週末を迎えます。既にいる人は、週に1回だけ -2 で引越しできます。今週来た人の置き直しは無料です。</p>' +
+        '<h3>一週間</h3><p>三人からひとり選ぶか、見送って家賃を +1 します。空き部屋を一度押すと、そこが決まりです。暮らし点と内訳は、置いたあとに出ます。部屋の印（角、隣が〇〇）は癖の目印で、点数ではありません。引越しは週に一度、-2 です。押した部屋が引越しそのものです。</p>' +
         '<h3>隣・上下・周囲</h3><ul>' +
         '<li>隣は上下左右だけです。ななめは隣ではありません。</li>' +
         '<li>上下が空室は、上と下に人がいないことです。建物の外も空いています。</li>' +

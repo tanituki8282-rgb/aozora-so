@@ -195,6 +195,17 @@ input[type="number"] {
 .room.is-leaving { opacity: 0.38; }
 
 .room-label { font-size: 11px; color: var(--muted); }
+.cue {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e7f3fb;
+  color: #3d6b8a;
+  font-size: 10px;
+  line-height: 1.4;
+}
 .icon { font-size: 28px; line-height: 1.15; }
 .icon.faint { color: #c3b4a6; }
 .who { font-size: 12px; text-align: center; }
