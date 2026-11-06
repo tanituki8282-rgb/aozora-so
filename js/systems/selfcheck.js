@@ -361,6 +361,26 @@ eq(taughtWeek2.report.total, taughtPreview.total, '春2の老婦人経路も予�
 eq(taughtWeek2.report.total, 5, '種493401の隣り合わせは5');
 eq(taughtWeek2.report.quota, 5, 'その週のノルマも5');
 check(taughtWeek2.report.pass && taught.strikes === 0, '見本の春2で判子は増えない');
+check(!taught.movedThisWeek && taughtWeek2.report.moveCost === 0, '一度置いた春2は引越ししていない');
+
+// 今週来た人の移動も、週1回・-2。無料の置き直しでは全部屋を探せない。
+var shift = new Aozora.Game(493401);
+shift.begin();
+shift.chooseApplicant('catlady');
+shift.placeNewcomer(0, 0);
+shift.confirmWeek();
+shift.ackResolve();
+shift.chooseApplicant('herbalist');
+shift.placeNewcomer(2, 2);
+var looked = shift.preview({ ghostMove: { id: 'herbalist', x: 1, y: 0 } });
+eq(looked.moveCost, 2, '今週の人を動かす予測も引越し2');
+var shifted = shift.moveResident('herbalist', 1, 0);
+check(shifted.ok && shift.movedThisWeek, '今週の人の引越しで週1回が立つ');
+var billed = shift.preview();
+eq(billed.moveCost, 2, '確定後の内訳も引越し2');
+eq(billed.total, Aozora.num.round2(billed.afterMul + billed.rent - 2), '引越し2は倍率の外');
+check(!shift.moveResident('herbalist', 0, 1).ok, '同じ週にもう一度は動かせない');
+check(!shift.moveNewcomer(2, 2).ok, 'moveNewcomer も二度目は拒否する');
 
 // ログに内訳が残る
 check(game.log.some(function (e) { return e.type === 'score' && e.lines && e.lines.length > 0; }), 'ログに内訳');

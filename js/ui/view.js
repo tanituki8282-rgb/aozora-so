@@ -803,7 +803,8 @@
         html += '</ul></article>';
       }
       html += '<p class="formula">(' + fmt(report.subtotal) + ' + ' + fmt(report.houseAdd) + ') × ' + fmt(report.multiplier) +
-        ' + 家賃 ' + fmt(report.rent) + ' − 引越し ' + fmt(report.moveCost) +
+        ' + 家賃 ' + fmt(report.rent) +
+        (report.moveCost ? ' − 引越し ' + fmt(report.moveCost) : '') +
         (report.fee ? ' − 未練 ' + fmt(report.fee) : '') +
         ' = <b>' + fmt(report.total) + '</b></p>';
       html += this._rankingHtml(report, hypothetical);
