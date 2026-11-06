@@ -208,6 +208,30 @@ input[type="number"] {
   align-items: flex-start;
   gap: 6px;
   box-shadow: var(--shadow);
+  overflow: visible;
+  white-space: normal;
+  height: auto;
+}
+
+/* 送り出しカードの残る点。数字が行の端で欠けないように、一行のまま出す。 */
+.remain-line {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #f4efe4;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.remain-line b {
+  font-size: 22px;
+  font-weight: 800;
 }
 
 .card .icon { font-size: 36px; }

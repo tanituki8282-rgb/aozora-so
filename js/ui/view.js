@@ -781,16 +781,17 @@
         if (choice.wantsToLeave) {
           html += '<span class="tag">いちばん満たされている</span>';
         }
+        // 残る点は折り返さない一行。長い説明の末尾だと、3列のカードで数字が欠ける。
+        html += '<span class="remain-line">残る盤は <b>' + fmt(choice.remainScore) + '</b>点</span>';
         html += '<span>今季の満足 ' + fmt(choice.happiness) + '。先週の個人点 ' + fmt(choice.lastPersonal) + ' を、来季の盤から失う。</span>';
         html += '<span>置き土産「' + esc(choice.souvenirName) + '」' + esc(choice.souvenirDesc) + '</span>';
-        html += '<span class="delta">この人を外して置き土産を足すと、今の盤は ' + fmt(choice.remainScore) + ' 点</span>';
         html += '</button>';
       }
       if (g.occupants.length === 1) {
         html += '<button type="button" class="shop-card" data-action="hold-graduate">';
         html += '<strong>' + choices[0].icon + ' ' + esc(choices[0].name) + ' を引き止める</strong>';
+        html += '<span class="remain-line">次の週の未練 <b>-3</b></span>';
         html += '<span>置き土産はありません。この人は残ります。</span>';
-        html += '<span class="delta">代わりに、次の週だけ引き止めの未練 -3</span>';
         html += '</button>';
       }
       html += '</section>';
