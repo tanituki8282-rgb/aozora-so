@@ -195,9 +195,8 @@
         }
         mover.x = request.ghostMove.x;
         mover.y = request.ghostMove.y;
-        if (mover.id !== this.newcomerId) {
-          moveCost = 2;
-        }
+        // 今週来た人も、ほかの人と同じ引越し費用。
+        moveCost = 2;
       }
 
       var pending = request.assumePendingId || this.pendingId;
@@ -350,7 +349,7 @@
     }
 
     /**
-     * 今週来た人の置き直しは無料。
+     * 今週来た人の移動も、週に1回・暮らし点 -2。
      * @param {number} x
      * @param {number} y
      * @returns {{ok:boolean, reason?:string}}
@@ -359,33 +358,17 @@
       if (!this.newcomerId) {
         return { ok: false, reason: '今週の新しい入居者はいません' };
       }
-      if (!this.roomAt(x, y)) {
-        return { ok: false, reason: '部屋がありません' };
-      }
-      var blocking = this.occupantAt(x, y);
-      if (blocking && blocking.id !== this.newcomerId) {
-        return { ok: false, reason: '空き部屋ではありません' };
-      }
-      var who = this.occupantById(this.newcomerId);
-      if (!who) {
-        return { ok: false, reason: '入居者が見当たりません' };
-      }
-      who.x = x;
-      who.y = y;
-      return { ok: true };
+      return this.moveResident(this.newcomerId, x, y);
     }
 
     /**
-     * 既に住んでいる人の引越し。週に1回、暮らし点 -2。
+     * 引越し。今週来た人も含めて、週に1回、暮らし点 -2。
      * @param {string} id
      * @param {number} x
      * @param {number} y
      * @returns {{ok:boolean, reason?:string}}
      */
     moveResident(id, x, y) {
-      if (id === this.newcomerId) {
-        return this.moveNewcomer(x, y);
-      }
       if (this.movedThisWeek) {
         return { ok: false, reason: '今週はもう引越し済みです' };
       }
